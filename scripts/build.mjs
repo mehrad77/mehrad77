@@ -24,6 +24,10 @@ const VISIBLE = 6;
 /** the log table on the README; data/log.json keeps filling either way, so turning it back on loses nothing */
 const SHOW_LOG = false;
 const TOKEN = process.env.PROFILE_PAT || process.env.GITHUB_TOKEN;
+/** the live pictures (matthiola's workers/live): drawn on request, so the README links them instead of committing them */
+const LIVE = "https://live.shab.boo";
+/** the game card shows a sample (its "last played" one) until Game Scrobbler's API is deployed: set to "" then */
+const GAMES_SAMPLE = "last";
 
 const readJson = (p) => JSON.parse(readFileSync(join(ROOT, p), "utf8"));
 const write = (p, s) => writeFileSync(join(ROOT, p), s);
@@ -418,6 +422,30 @@ const picture = (name, alt) =>
     `<img alt="${attr(alt)}" src="assets/${name}-day.svg">`,
     "</picture>",
   ].join("");
+/** The live cards are a side note, so they are small: two side by side where the column is 840 or 680 px (404 and 324
+ * px), one to a row in the 510 and 340 px columns. Side by side, each carries 8px of room on its inner edge (the
+ * Worker's gap=), so with the space between them the gutter is about 20px. */
+const LIVE_WIDTH = { 840: 404, 680: 324, 510: 510, 340: 340 };
+/** a live picture, from the Worker: one URL per size and theme, chosen by the same media queries; `gap` is the side
+ * that gets the gutter when it shares a row */
+const livePicture = (name, alt, extra = "", gap = "") => {
+  const src = (L, theme) => {
+    const px = L.width * L.scale;
+    const room = gap && LIVE_WIDTH[px] < px ? `&amp;gap=${gap}` : "";
+    return `${LIVE}/${name}.svg?w=${LIVE_WIDTH[px]}&amp;theme=${theme}${extra}${room}`;
+  };
+  const desktop = LAYOUTS.find((L) => !L.media);
+  return [
+    "<picture>",
+    ...LAYOUTS.filter((L) => L.media).flatMap((L) => [
+      `<source media="${dark(L.media)}" srcset="${src(L, "night")}">`,
+      `<source media="${L.media.join(", ")}" srcset="${src(L, "day")}">`,
+    ]),
+    `<source media="(prefers-color-scheme: dark)" srcset="${src(desktop, "night")}">`,
+    `<img alt="${attr(alt)}" src="${src(desktop, "day")}">`,
+    "</picture>",
+  ].join("");
+};
 const linked = (url, name, alt) => `<a href="${attr(url)}">${picture(name, alt)}</a>`;
 /** a centred paragraph: the column's spare width splits evenly on both sides */
 const centred = (inner) => `<p align="center">\n${inner}\n</p>`;
@@ -438,6 +466,15 @@ const blocks = {
   scene: centred(picture("scene", "Istanbul's skyline: a grey cat on a rooftop and a roller bird perched on Galata Tower")),
   hello: helloMd,
   stats: centred(picture("stats", `Radio Shab Boo, 88.7 FM: on air ${years} years, ${fmt(contributions)} contributions in the last year, ${repos} public repos, ${stars} stars; signal ${signal} of 12 (weeks with contributions); last tuned ${today}`)),
+  // one paragraph, so the two cards share a row where there is room for both
+  live: centred(
+    [
+      `<a href="https://www.last.fm/user/mehrad77">${livePicture("onair", "Radio Shab Boo on air: the track playing now, or the last one played, from Last.fm", "", "right")}</a>`,
+      GAMES_SAMPLE
+        ? livePicture("playing", "A sample of Radio Shab Boo's arcade card, not real data: last played, Hollow Knight: Silksong, from Game Scrobbler", `&amp;mock=${GAMES_SAMPLE}`, "left")
+        : livePicture("playing", "Radio Shab Boo's arcade: the game playing now, or the last one played, from Game Scrobbler", "", "left"),
+    ].join("\n"),
+  ),
   log: SHOW_LOG ? logMd : "",
   garden: centred(picture("garden", `A year of contributions, ${range.toLowerCase()}: ${fmt(contributions)} in all, one matthiola per week, taller for busier weeks; ${weeks.length - activeWeeks} quiet weeks are bare soil`)),
 };
