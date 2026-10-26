@@ -1,0 +1,16 @@
+{
+  "hello": "hi! i'm Mehrad Rousta.",
+  "name": "Mehrad Rousta",
+  "tagline": "who dreams, lives, loves, learns, and creates.",
+  "role": "agentic software engineer · istanbul",
+  "stack": "typescript · astro · go · agents",
+  "site": "https://shab.boo",
+  "links": [
+    { "id": "site", "label": "shab.boo", "url": "https://shab.boo" },
+    { "id": "blog", "label": "blog", "url": "https://blog.shab.boo" },
+    { "id": "projects", "label": "projects", "url": "https://projects.shab.boo" },
+    { "id": "resume", "label": "résumé", "url": "https://resume.shab.boo" }
+  ],
+  "call": "call the station:",
+  "email": "mehrad@protonmail.com"
+}

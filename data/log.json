@@ -1,0 +1,46 @@
+{
+  "since": "2026-09-01",
+  "entries": [
+    {
+      "date": "2026-10-25",
+      "kind": "repo",
+      "title": "AgenticNewsRoom",
+      "url": "https://github.com/mehrad77/AgenticNewsRoom",
+      "note": "publications where people set the direction and agents research and write",
+      "source": "note"
+    },
+    {
+      "date": "2026-10-23",
+      "kind": "repo",
+      "title": "IstanbulWayfound",
+      "url": "https://github.com/mehrad77/IstanbulWayfound",
+      "note": "",
+      "source": "auto"
+    },
+    {
+      "date": "2026-10-12",
+      "kind": "release",
+      "repo": "hippocampus",
+      "title": "hippocampus v0.14.1",
+      "url": "https://github.com/mehrad77/hippocampus/releases/tag/v0.14.1",
+      "note": "",
+      "source": "auto"
+    },
+    {
+      "date": "2026-10-10",
+      "kind": "repo",
+      "title": "scrim",
+      "url": "https://github.com/mehrad77/scrim",
+      "note": "browser-native show control and projection for interactive theatre",
+      "source": "note"
+    },
+    {
+      "date": "2026-09-27",
+      "kind": "repo",
+      "title": "hippocampus",
+      "url": "https://github.com/mehrad77/hippocampus",
+      "note": "shared, curated memory for a party of AI agents",
+      "source": "note"
+    }
+  ]
+}
