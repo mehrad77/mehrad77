@@ -5,7 +5,9 @@
 import { makeGrid, stamp } from "./svg.mjs";
 import { textRows, textWidth } from "./text.mjs";
 
+/** cells per plant: six, or five when the bed is tight (the widest plant is five cells, so neighbours then touch) */
 const COL = 6;
+const MIN_COL = 5;
 const MARGIN = 4;
 const HEIGHTS = [0, 4, 9, 14, 20];
 const RACEME = [0, 0, 3, 6, 10];
@@ -59,8 +61,10 @@ function plant(g, cx, soil, level, jitter, c) {
  * and its size. */
 export function gardenGrid(weeks, c, caption, range, width = 0) {
   const lv = levels(weeks.map((w) => w.total));
-  const w = Math.max(MARGIN * 2 + weeks.length * COL, width);
-  const left = Math.floor((w - weeks.length * COL) / 2);
+  const col = width ? Math.min(COL, Math.floor((width - MARGIN * 2) / weeks.length)) : COL;
+  if (col < MIN_COL) throw new Error(`${weeks.length} plants need ${weeks.length * MIN_COL + MARGIN * 2} cells; the bed has ${width}`);
+  const w = Math.max(MARGIN * 2 + weeks.length * col, width);
+  const left = Math.floor((w - weeks.length * col) / 2);
   const soil = 2 + HEIGHTS[4] + 2;
   const ty = soil + 1 + 3 + 3;
   const stacked = textWidth(caption) + 8 + textWidth(range) > w - MARGIN * 2;
@@ -71,7 +75,7 @@ export function gardenGrid(weeks, c, caption, range, width = 0) {
     seed = (seed * 1103515245 + 12345) % 2147483648;
     return seed / 2147483648;
   };
-  weeks.forEach((_, i) => plant(g, left + i * COL + 2, soil, lv[i], Math.floor(rnd() * 3) - 1, c));
+  weeks.forEach((_, i) => plant(g, left + i * col + 2, soil, lv[i], Math.floor(rnd() * 3) - 1, c));
   for (let x = MARGIN - 2; x < w - MARGIN + 2; x++) g[soil][x] = c.soil;
   // the hatch under the soil line, as on the landing's ground
   for (let x = MARGIN; x < w - MARGIN - 2; x += 5 + Math.floor(rnd() * 5)) {

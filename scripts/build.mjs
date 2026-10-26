@@ -9,7 +9,7 @@
  * Log entries are never rewritten once they exist: edit their text in data/log.json by hand and it stays. Entries
  * you add yourself carry "source": "note".
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gardenGrid } from "./lib/garden.mjs";
@@ -30,8 +30,8 @@ const write = (p, s) => writeFileSync(join(ROOT, p), s);
 const palette = readJson("data/palette.json");
 const profile = readJson("data/profile.json");
 const THEMES = ["night", "day"];
-/** px per cell for every picture: a whole number, so each cell is the same size on screen and the pictures stay
- * within GitHub's README column on a desktop (the widest, the scene, is 680px) */
+/** px per cell for the desktop and phone pictures (the wide one uses 3): a whole number, so each cell is the same size
+ * on screen */
 const SCALE = 2;
 
 /* ---- fetch ---- */
@@ -146,7 +146,7 @@ function figure(frame, legend, outline, w, h) {
 
 /** The scene through a window `view` = { x0, w, moon: [x, y] } (cells of the full skyline): the whole city on a
  * desktop, its right-hand end (Camlica, Galata, the cat and the bird) on a phone. */
-function scene(theme, view) {
+function scene(theme, view, scale) {
   const c = palette[theme];
   const { w, h } = sky;
   const g = makeGrid(w, h);
@@ -223,7 +223,7 @@ function scene(theme, view) {
   return svgDoc({
     w: vw,
     h,
-    scale: SCALE,
+    scale,
     title: "Radio Shab Boo",
     desc: `Istanbul's skyline ${theme === "night" ? "at night under a crescent moon" : "by day, drawn in pencil"}: ${view.x0 ? "" : "the business towers, "}Camlica on its hill, the Bosphorus, and a grey cat on a rooftop beside Galata Tower, where a roller bird is perched.`,
     body,
@@ -232,9 +232,19 @@ function scene(theme, view) {
 }
 
 /* ---- paint: the stats strip ---- */
-/** The stats strip, `w` cells wide, its four readings in `cols` columns (4 in a row, or 2 x 2 on a phone). */
-function stats(theme, w, cols) {
+const readings = [
+  [`${years}`, "years on air"],
+  [fmt(contributions), "contributions · 1 yr"],
+  [`${repos}`, "public repos"],
+  [`${stars}`, "stars"],
+];
+/** a reading's width: its value (drawn at twice the size) or its label, whichever is wider */
+const readingW = ([value, label]) => Math.max(textWidth(value) * 2, textWidth(label));
+const READINGS_W = readings.reduce((n, r) => n + readingW(r), 0);
+/** The stats strip, `w` cells wide: its four readings in a row spread edge to edge when they fit, else 2 x 2. */
+function stats(theme, w, scale) {
   const c = palette[theme];
+  const cols = 8 + READINGS_W + 3 * 6 + 8 <= w ? 4 : 2;
   const rowsOf = Math.ceil(4 / cols);
   const ruleY = 20 + rowsOf * 21 + 1;
   const h = ruleY + 12;
@@ -255,14 +265,16 @@ function stats(theme, w, cols) {
   for (let k = 0; k < 12; k++) for (let y = 5; y < 10; y++) g[y][w - 7 - (12 - k) * 3 + 1] = k < lit ? c.accent : c.meterOff;
   rule(14);
   // the readings: the value large, its label under it
-  const cells = [
-    [`${years}`, "years on air"],
-    [fmt(contributions), "contributions · 1 yr"],
-    [`${repos}`, "public repos"],
-    [`${stars}`, "stars"],
-  ];
+  const cells = readings;
+  // in a row, each reading as wide as its value or label and the room left over shared between them
+  const widths = cells.map(readingW);
+  const gap = cols === 4 ? (w - 16 - widths.reduce((n, x) => n + x, 0)) / 3 : 0;
+  if (gap < 0) throw new Error(`the readings need ${w - 16 - 3 * gap} cells; the strip has ${w - 16}`);
   cells.forEach(([value, label], k) => {
-    const x = 8 + (k % cols) * Math.floor((w - 16) / cols);
+    const x =
+      cols === 4
+        ? 8 + Math.round(widths.slice(0, k).reduce((n, x) => n + x, 0) + gap * k)
+        : 8 + (k % cols) * Math.floor((w - 16) / cols);
     const y = 20 + Math.floor(k / cols) * 21;
     text(value, x, y, c.text, 2);
     text(label, x, y + 12, c.textMuted);
@@ -274,7 +286,7 @@ function stats(theme, w, cols) {
   return svgDoc({
     w,
     h,
-    scale: SCALE,
+    scale,
     title: "Station readings",
     desc,
     body: `${pathsMarkup(g)}\n<path class="dot" fill="${c.ground}" d="M7 6h1v1h-1zM6 7h3v1h-3zM7 8h1v1h-1z"/>`,
@@ -283,95 +295,137 @@ function stats(theme, w, cols) {
 }
 
 /* ---- paint: the hello card, its buttons and the call line ---- */
-const ui = (grid, w, h, title, desc) => svgDoc({ w, h, scale: SCALE, title, desc, body: pathsMarkup(grid) });
+const ui = (grid, w, h, title, desc, scale) => svgDoc({ w, h, scale, title, desc, body: pathsMarkup(grid) });
 const cardText = `${profile.hello} ${profile.tagline} ${profile.role}. ${profile.stack}.`;
 const linkLabel = (l) => l.label.toUpperCase();
-/** GitHub sets the link buttons side by side with a space between; about two cells at SCALE */
-const SPACE_CELLS = 2;
-// one column, as wide as the scene: the card, the call button, the stats and the garden take its width, and the link
-// buttons share it equally (with the spaces between them), as the hello page's buttons do
-const COLUMN = sky.w;
-const BUTTON_W = Math.floor((COLUMN - SPACE_CELLS * (profile.links.length - 1)) / profile.links.length);
-/** the phone layout: pictures half as wide (they shrink a little more on the smallest phones), the link buttons two to
- * a row, the readings 2 x 2, a plant per fortnight */
-const NARROW = 170;
-const NARROW_BUTTON_W = 68;
-/** GitHub's own phone breakpoint: below it the README spans the window */
-const NARROW_MEDIA = "(max-width: 767px)";
 
 /* ---- paint: the garden ---- */
 const range = `${monthYear(weeks[0].start)} - ${monthYear(weeks.at(-1).start)}`.toUpperCase();
 const fortnights = Array.from({ length: Math.ceil(weeks.length / 2) }, (_, i) => ({
   total: weeks.slice(i * 2, i * 2 + 2).reduce((n, w) => n + w.total, 0),
 }));
-function garden(theme, width, plots) {
+function garden(theme, width, plots, scale) {
   const { grid, w, h } = gardenGrid(plots, palette[theme], `a year of contributions · ${fmt(contributions)}`, range, width);
   return svgDoc({
     w,
     h,
-    scale: SCALE,
+    scale,
     title: "A year of contributions",
     desc: `${fmt(contributions)} contributions from ${range.toLowerCase()}, one matthiola per ${plots.length === weeks.length ? "week" : "fortnight"}, taller for busier ones; ${weeks.length - activeWeeks} weeks were quiet.`,
     body: pathsMarkup(grid),
   });
 }
 
-const LAYOUTS = [
-  { suffix: "", width: COLUMN, buttonW: BUTTON_W, compact: false, view: { x0: 0, w: sky.w, moon: [132, 20] }, cols: 4, plots: weeks },
-  {
-    suffix: "-narrow",
-    width: NARROW,
-    buttonW: NARROW_BUTTON_W,
-    compact: true,
-    view: { x0: sky.w - NARROW, w: NARROW, moon: [sky.w - NARROW + 46, 18] },
-    cols: 2,
-    plots: fortnights,
-  },
+/*
+ * Four sizes, centred in the README column. Each window gets the widest that fits its column, so pictures are never
+ * scaled (only the 340px ones shrink, on phones whose column is narrower), and what the column has left over splits
+ * evenly on both sides: 510 sits halfway between 340 and 680, so no size leaves more than about 85px either side. The
+ * column, measured on github.com/mehrad77 (October 2026) and checked width by width against a copy of the page:
+ */
+const githubColumn = (win) => (win < 768 ? win - 82 : win < 1012 ? win - 370 : Math.min(win - 434, 846));
+const SIZES = [
+  { px: 840, scale: 3 },
+  { px: 680, scale: SCALE },
+  { px: 510, scale: SCALE },
+  { px: 340, scale: SCALE },
 ];
+/** the size for a window: the widest that fits its column, else the smallest */
+const sizeFor = (win) => SIZES.find((s) => s.px <= githubColumn(win)) ?? SIZES.at(-1);
+/** Each size's windows, as media queries: walk the window widths and close a range wherever the size changes. The
+ * 680px size gets none: it is the fallback <img>. */
+const MEDIA = (() => {
+  const LAST = 2000;
+  const ranges = new Map(SIZES.map((s) => [s.px, []]));
+  let from = 0;
+  for (let win = 1; win <= LAST + 1; win++) {
+    if (win <= LAST && sizeFor(win) === sizeFor(from)) continue;
+    ranges.get(sizeFor(from).px).push([from, win - 1]);
+    from = win;
+  }
+  const query = ([a, b]) =>
+    b >= LAST ? `(min-width: ${a}px)` : a === 0 ? `(max-width: ${b}px)` : `(min-width: ${a}px) and (max-width: ${b}px)`;
+  return new Map([...ranges].map(([px, rs]) => [px, px === 680 ? null : rs.map(query)]));
+})();
+/** GitHub sets the link buttons apart with a space: about 3.7px in its font on a Mac, wider elsewhere; leave 5px */
+const SPACE_PX = 5;
+const LAYOUTS = SIZES.map(({ px, scale }) => {
+  const width = px / scale;
+  const media = MEDIA.get(px);
+  const n = profile.links.length;
+  const natural = Math.max(...profile.links.map((l) => button(palette.night, [[[linkLabel(l), "text"]]], 0, true).w));
+  // the link buttons: four to a row when they fit, else two; on the smallest size one each, full width, so they
+  // shrink with the column on a small phone like the rest. A row's buttons share its width, less the spaces.
+  const perRow = px === 340 ? 1 : 4 * natural + Math.ceil((3 * SPACE_PX) / scale) <= width ? 4 : 2;
+  const rowCells = Math.floor((px - (perRow - 1) * SPACE_PX) / scale);
+  const buttonWs = Array.from({ length: n }, (_, i) => Math.floor(rowCells / perRow) + ((i % perRow) < rowCells % perRow ? 1 : 0));
+  // the scene keeps its right-hand end (Galata, the cat and the bird); the moon stays over the city in the window
+  const x0 = sky.w - width;
+  const moon = x0 + 26 <= 132 ? [132, 20] : [x0 + 46, 18];
+  return {
+    suffix: px === 680 ? "" : `-${px}`,
+    media,
+    scale,
+    width,
+    buttonWs,
+    compact: width < sky.w,
+    view: { x0, w: width, moon },
+    plots: 52 * 5 + 8 <= width ? weeks : fortnights,
+  };
+});
+
+/** remove the pictures a previous build wrote that this one does not */
+const written = new Set();
+const writeAsset = (path, svg) => {
+  written.add(path);
+  write(path, svg);
+};
 for (const theme of THEMES) {
   const c = palette[theme];
   for (const L of LAYOUTS) {
     const out = (name) => `assets/${name}${L.suffix}-${theme}.svg`;
-    write(out("scene"), scene(theme, L.view));
+    writeAsset(out("scene"), scene(theme, L.view, L.scale));
     const hello = card(c, profile, L.width);
-    write(out("card"), ui(hello.grid, hello.w, hello.h, `hi, I'm ${profile.name}`, cardText));
-    for (const l of profile.links) {
-      const b = button(c, [[[linkLabel(l), "text"]]], L.buttonW, L.compact);
-      if (b.w > L.buttonW) throw new Error(`the ${l.label} button needs ${b.w} cells; the row gives each ${L.buttonW}`);
-      write(out(`link-${l.id}`), ui(b.grid, b.w, b.h, l.label, `${l.label}: ${l.url}`));
+    writeAsset(out("card"), ui(hello.grid, hello.w, hello.h, `hi, I'm ${profile.name}`, cardText, L.scale));
+    for (const [i, l] of profile.links.entries()) {
+      const b = button(c, [[[linkLabel(l), "text"]]], L.buttonWs[i], L.compact);
+      if (b.w > L.buttonWs[i]) throw new Error(`the ${l.label} button needs ${b.w} cells; the row gives it ${L.buttonWs[i]}`);
+      writeAsset(out(`link-${l.id}`), ui(b.grid, b.w, b.h, l.label, `${l.label}: ${l.url}`, L.scale));
     }
-    // the call line: one line on a desktop; on a phone the address goes under its label
-    const call = L.compact
-      ? [[[profile.call, "textMuted"]], [[profile.email, "text"]]]
-      : [[[`${profile.call} `, "textMuted"], [profile.email, "text"]]];
-    const callButton = button(c, call, L.width, L.compact);
-    write(out("call"), ui(callButton.grid, callButton.w, callButton.h, profile.call.replace(/:$/, ""), `${profile.call} ${profile.email}`));
-    write(out("stats"), stats(theme, L.width, L.cols));
-    write(out("garden"), garden(theme, L.width, L.plots));
+    // the call line: on one line when it fits, else the address under its label
+    let callButton = button(c, [[[`${profile.call} `, "textMuted"], [profile.email, "text"]]], L.width, L.compact);
+    if (callButton.w > L.width) callButton = button(c, [[[profile.call, "textMuted"]], [[profile.email, "text"]]], L.width, L.compact);
+    writeAsset(out("call"), ui(callButton.grid, callButton.w, callButton.h, profile.call.replace(/:$/, ""), `${profile.call} ${profile.email}`, L.scale));
+    writeAsset(out("stats"), stats(theme, L.width, L.scale));
+    writeAsset(out("garden"), garden(theme, L.width, L.plots, L.scale));
   }
 }
+for (const f of readdirSync(join(ROOT, "assets"))) if (f.endsWith(".svg") && !written.has(`assets/${f}`)) unlinkSync(join(ROOT, "assets", f));
 
 /* ---- README ---- */
 const attr = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/** each media query of a layout, also asking for the dark theme */
+const dark = (media) => media.map((m) => `${m} and (prefers-color-scheme: dark)`).join(", ");
 /** One line, so it can sit inside a link or beside other pictures in a paragraph. The browser takes the first source
- * that matches: a phone at night, a phone by day, a desktop at night; else the desktop day picture. */
+ * that matches: each sized layout at night, then by day; then the desktop at night; else the desktop day picture. */
 const picture = (name, alt) =>
   [
     "<picture>",
-    `<source media="${NARROW_MEDIA} and (prefers-color-scheme: dark)" srcset="assets/${name}-narrow-night.svg">`,
-    `<source media="${NARROW_MEDIA}" srcset="assets/${name}-narrow-day.svg">`,
+    ...LAYOUTS.filter((L) => L.media).flatMap((L) => [
+      `<source media="${dark(L.media)}" srcset="assets/${name}${L.suffix}-night.svg">`,
+      `<source media="${L.media.join(", ")}" srcset="assets/${name}${L.suffix}-day.svg">`,
+    ]),
     `<source media="(prefers-color-scheme: dark)" srcset="assets/${name}-night.svg">`,
     `<img alt="${attr(alt)}" src="assets/${name}-day.svg">`,
     "</picture>",
   ].join("");
 const linked = (url, name, alt) => `<a href="${attr(url)}">${picture(name, alt)}</a>`;
+/** a centred paragraph: the column's spare width splits evenly on both sides */
+const centred = (inner) => `<p align="center">\n${inner}\n</p>`;
 const helloMd = [
-  picture("card", cardText),
-  "",
-  profile.links.map((l) => linked(l.url, `link-${l.id}`, l.label)).join("\n"),
-  "",
-  linked(`mailto:${profile.email}`, "call", `${profile.call} ${profile.email}`),
-].join("\n");
+  centred(picture("card", cardText)),
+  centred(profile.links.map((l) => linked(l.url, `link-${l.id}`, l.label)).join("\n")),
+  centred(linked(`mailto:${profile.email}`, "call", `${profile.call} ${profile.email}`)),
+].join("\n\n");
 const row = (e) => `| ${e.date} | ${e.kind} | [${e.title}](${e.url})${e.note ? ` — ${e.note}` : ""} |`;
 const table = (rows) => ["| date | type | entry |", "| --- | --- | --- |", ...rows.map(row)].join("\n");
 const [recent, earlier] = [log.entries.slice(0, VISIBLE), log.entries.slice(VISIBLE)];
@@ -381,11 +435,11 @@ const logMd = [
 ].join("");
 
 const blocks = {
-  scene: picture("scene", "Istanbul's skyline: a grey cat on a rooftop and a roller bird perched on Galata Tower"),
+  scene: centred(picture("scene", "Istanbul's skyline: a grey cat on a rooftop and a roller bird perched on Galata Tower")),
   hello: helloMd,
-  stats: picture("stats", `Radio Shab Boo, 88.7 FM: on air ${years} years, ${fmt(contributions)} contributions in the last year, ${repos} public repos, ${stars} stars; signal ${signal} of 12 (weeks with contributions); last tuned ${today}`),
+  stats: centred(picture("stats", `Radio Shab Boo, 88.7 FM: on air ${years} years, ${fmt(contributions)} contributions in the last year, ${repos} public repos, ${stars} stars; signal ${signal} of 12 (weeks with contributions); last tuned ${today}`)),
   log: SHOW_LOG ? logMd : "",
-  garden: picture("garden", `A year of contributions, ${range.toLowerCase()}: ${fmt(contributions)} in all, one matthiola per week, taller for busier weeks; ${weeks.length - activeWeeks} quiet weeks are bare soil`),
+  garden: centred(picture("garden", `A year of contributions, ${range.toLowerCase()}: ${fmt(contributions)} in all, one matthiola per week, taller for busier weeks; ${weeks.length - activeWeeks} quiet weeks are bare soil`)),
 };
 let readme = readFileSync(join(ROOT, "README.md"), "utf8");
 for (const [name, content] of Object.entries(blocks)) {
