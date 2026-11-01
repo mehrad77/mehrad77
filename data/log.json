@@ -2,6 +2,31 @@
   "since": "2026-09-01",
   "entries": [
     {
+      "date": "2026-10-27",
+      "kind": "repo",
+      "title": "kumru",
+      "url": "https://github.com/mehrad77/kumru",
+      "note": "Kumru · Turkish Notebook: a phone-first Turkish practice app (A1–B1) with word cards, grammar lessons, a skill path and a daily paper-theatre story, for Persian speakers",
+      "source": "auto"
+    },
+    {
+      "date": "2026-10-27",
+      "kind": "repo",
+      "title": "sahne",
+      "url": "https://github.com/mehrad77/sahne",
+      "note": "A paper-theatre stage engine for interactive scenes on the web: cut-paper puppets, lip-sync, light and weather, sound",
+      "source": "auto"
+    },
+    {
+      "date": "2026-10-27",
+      "kind": "release",
+      "repo": "sahne",
+      "title": "sahne v0.1.0",
+      "url": "https://github.com/mehrad77/sahne/releases/tag/v0.1.0",
+      "note": "Sahne v0.1.0",
+      "source": "auto"
+    },
+    {
       "date": "2026-10-25",
       "kind": "repo",
       "title": "AgenticNewsRoom",
